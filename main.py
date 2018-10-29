@@ -1,21 +1,18 @@
 import hashlib
-from Hack import Hack
 import string
 
-chars = "@_!#$%^&*()<>?~:" + string.ascii_letters + string.digits
+from Hack import Hack
 
+chars = "@_!#$%^&*()<>?~:" + string.ascii_letters + string.digits
 
 def main():
     print("Insert password: ")
     password = input()
-    first = hashlib.sha1(b'(%s)' % str.encode(password))
-    hash = first.hexdigest()
-    print("First hash: ")
-    print(hash)
+    hash = hashlib.sha1(b'(%s)' % str.encode(password)).hexdigest()
+    print("Hashed password: {}".format(hash))
     obj = Hack(chars)
     result = obj.find_pass(hash)
-    print("Your password:")
-    print(result)
+    print("Your password: {}".format(result))
 
 
 if __name__ == '__main__':
