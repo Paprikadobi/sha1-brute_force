@@ -1,9 +1,8 @@
-import hashlib
+from sha1 import sha1, to_hex
 from itertools import chain, product
 
 
 class Hack:
-
     def __init__(self, chars):
         self.chars = chars
 
@@ -13,8 +12,7 @@ class Hack:
             for i in range(min_length, max_length + 1)))
 
     def find_pass(self, hash):
-        while True:
-            for password in self.bruteforce(self.chars, 4, 4):
-                hash1 = hashlib.sha1(b'(%s)' % str.encode(password)).hexdigest()
-                if hash1 == hash:
-                    return password
+        for password in self.bruteforce(self.chars, 5, 5):
+            hash1 = sha1(b'%s' % str.encode(password))
+            if hash1 == hash:
+                return password
