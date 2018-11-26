@@ -1,19 +1,27 @@
-from sha1 import sha1, to_hex
+from sha1 import sha1, to_hex, brute_force
 import string
+import time
 
-from Hack import Hack
+# from Hack import Hack
 
 chars = string.ascii_letters + string.digits + "@_!#$%^&*()<>?~:"
 
 def main():
     print("Insert password: ")
     password = input()
-    hash = sha1(b'%s' % str.encode(password))
 
-    print("Hashed password: {}".format(to_hex(*hash)))
+    hash = sha1(password.encode())
 
-    obj = Hack(chars)
-    result = obj.find_pass(hash)
+    # print("Hashed password: {}".format(to_hex(*hash)))
+
+    # obj = Hack(chars)
+
+    start = time.time()
+    
+    result = brute_force(chars.encode(), *hash)
+    # result = obj.find_pass(hash)
+
+    print(time.time() - start)
     print("Your password: {}".format(result))
 
 
