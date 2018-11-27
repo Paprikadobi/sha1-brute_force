@@ -22,7 +22,7 @@ def main():
     # result = obj.find_pass(hash)
 
     print(time.time() - start)
-    print("Your password: {}".format(result))
+    print("Your password: {}".format(result.decode('UTF-8')))
 
 
 if __name__ == '__main__':
