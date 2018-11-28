@@ -14,41 +14,63 @@ cdef class Generator:
 
     cdef char* charset
     cdef unsigned int charset_length
-    cdef unsigned int i
-    cdef unsigned int length
+    cdef long i
+    cdef int length
+    cdef int max_length
     cdef unsigned int using
-    cdef char found
+    cdef char* found
+    cdef long* steps
+    cdef unsigned int buff_size
+    cdef char should_continue
 
-    def __init__(self, const char[] charset, int min_length = 1):
+    def __cinit__(self, const char[] charset, int min_length, int max_length, unsigned int buff_size):
         self.charset = charset
         self.charset_length = strlen(charset)
-        self.i = 0
         self.length = min_length
         self.using = 0
-        self.found = 0
+        self.buff_size = buff_size
+        self.max_length = max_length
+        self.should_continue = 1
+        self.found = NULL
 
-    cdef char* next(self, char* password) nogil:
+        cdef int j
+        self.steps = <long*> malloc(sizeof(long) * (max_length + 2))
+        self.steps[0] = 0
+        for j in range(1, max_length + 1):
+            self.steps[j] = self.steps[j - 1] + <long>pow(self.charset_length, j)
+
+        self.i = self.steps[min_length - 1]
+
+    cdef void next(self, char** password) nogil:
         while self.using:
             pass
         self.using = 1
         cdef long j = self.i
-        self.i += 1
+        self.i = self.i + self.buff_size
         self.using = 0
+        cdef long tmp = j
         
-        cdef unsigned int i = 0
+        cdef unsigned int i = 0, k = 0
         cdef unsigned int mod = self.charset_length
 
-        if j == <unsigned int>pow(mod, self.length):
-            self.length += 1
-            password = <char*>realloc(password, self.length + 1)
-        for i in reversed(range(self.length)):
-            password[i] = self.charset[j % mod]
-            j -= (j % mod) + mod
-            j /= mod
+        if j == self.steps[self.length]:
+            self.length = self.length + 1
+            if self.length > self.max_length:
+                self.should_continue = 0
+                return 
+            for k in range(self.buff_size):
+                password[k] = <char*>realloc(password[k], self.length + 1)
 
-        password[self.length] = '\0'
+        cdef unsigned int length = self.length
 
-        return password
+        for k in range(self.buff_size):
+            j = tmp + k
+            for i in reversed(range(length)):
+                password[k][i] = self.charset[j % mod]
+                j = j - (j % mod) - mod
+                j = j / mod
+
+            password[k][length] = '\0'
 
 cdef struct hash_t:
     unsigned int h0, h1, h2, h3, h4
@@ -56,7 +78,7 @@ cdef struct hash_t:
 cdef unsigned int rol(unsigned int n, unsigned int b) nogil:
     return ((n << b) | (n >> (32 - b)))
 
-cdef hash_t _sha1(const char[] data, unsigned int length) nogil:
+cdef hash_t _sha1(const char* data) nogil:
     cdef unsigned int h0 = 0x67452301
     cdef unsigned int h1 = 0xEFCDAB89
     cdef unsigned int h2 = 0x98BADCFE
@@ -64,6 +86,7 @@ cdef hash_t _sha1(const char[] data, unsigned int length) nogil:
     cdef unsigned int h4 = 0xC3D2E1F0
 
     cdef unsigned int i
+    cdef unsigned int length = strlen(data)
 
     cdef unsigned int[80] w
 
@@ -126,36 +149,46 @@ cdef hash_t _sha1(const char[] data, unsigned int length) nogil:
 cdef unsigned int hashes_equals(hash_t first, hash_t second) nogil:
     return first.h0 == second.h0 and first.h1 == second.h1 and first.h2 == second.h2 and first.h3 == second.h3 and first.h4 == second.h4
 
-def sha1(const char[] data):
-    cdef hash_t hash = _sha1(data, strlen(data))
+def sha1(const char* data):
+    cdef hash_t hash = _sha1(data)
     return (hash.h0, hash.h1, hash.h2, hash.h3, hash.h4)
 
-cdef char* _brute_force(const char[] charset, hash_t target):
-    cdef Generator generator = Generator(charset)
-    cdef char* password
+cdef char* _brute_force(Generator generator, hash_t target, int min_length, unsigned int num_threads) nogil: 
+    cdef char** password
+    cdef unsigned int i
 
-    with nogil, parallel(num_threads = 2):
-        password = <char*>malloc(2)
-        while True:
-            password = generator.next(password)
-            if hashes_equals(_sha1(password, generator.length), target):
-                generator.found = 1
-                printf("%d\n", generator.i)
-                return password
+    with parallel(num_threads = num_threads):
+        i = 0
+        password = <char**>malloc(sizeof(char*) * generator.buff_size)
+        for i in range(generator.buff_size):
+            password[i] = <char*>malloc(sizeof(char) * (min_length + 1))
+        while generator.should_continue:
+            generator.next(password)
+            for i in range(generator.buff_size):
+                # printf("%d: %s, %ld\n", openmp.omp_get_thread_num(), password[i], generator.i)
+                if hashes_equals(_sha1(password[i]), target):
+                    generator.found = password[i]
+                    printf("%ld\n", generator.i)
+                    break
             if generator.found:
                 break
+    
+    return generator.found
 
-def brute_force(const char[] charset, unsigned int h0, unsigned int h1, unsigned int h2, unsigned int h3, unsigned int h4):    
+def brute_force(const char[] charset, unsigned int h0, unsigned int h1, unsigned int h2, unsigned int h3, unsigned int h4, int min_length = 1, int max_length = 6, unsigned int num_threads = 1, unsigned int buff_size = 1):    
     cdef hash_t target
     target.h0 = h0
     target.h1 = h1
     target.h2 = h2
     target.h3 = h3
     target.h4 = h4
+    
+    cdef Generator generator = Generator(charset, min_length, max_length, buff_size)
+    cdef char* password = _brute_force(generator, target, min_length, num_threads)
 
-    cdef char* password = _brute_force(charset, target)
-
-    return password
+    if password:
+        return password
+    return -1
 
 def to_hex(h0, h1, h2, h3, h4):
     return '%08x%08x%08x%08x%08x' % (h0, h1, h2, h3, h4)
