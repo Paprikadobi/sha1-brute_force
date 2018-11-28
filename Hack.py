@@ -1,4 +1,4 @@
-from sha1 import sha1, to_hex, brute_force
+from sha1 import sha1
 from itertools import chain, product
 
 
@@ -12,7 +12,6 @@ class Hack:
             for i in range(min_length, max_length + 1)))
 
     def find_pass(self, hash):
-        return brute_force(self.chars.encode(), *hash)
-        # for password in self.bruteforce(self.chars, 1, 7):
-        #     if sha1(password.encode()) == hash:
-        #         return password
+        for password in self.bruteforce(self.chars, 1, 7):
+            if sha1(password.encode()) == hash:
+                return password.encode()
